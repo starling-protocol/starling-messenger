@@ -1,0 +1,50 @@
+# Resolve react_native_pods.rb with node to allow for hoisting
+require Pod::Executable.execute_command('node', ['-p',
+  'require.resolve(
+    "react-native/scripts/react_native_pods.rb",
+    {paths: [process.argv[1]]},
+  )', __dir__]).strip
+
+platform :ios, min_ios_version_supported
+prepare_react_native_project!
+
+use_frameworks! :linkage => :static
+
+target 'starling_messenger' do
+  config = use_native_modules!
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    
+    # An absolute path to your application root.
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  target 'starling_messengerTests' do
+    inherit! :complete
+    # Pods for testing
+  end
+
+  post_install do |installer|
+    installer.pods_project.targets.each do |target|
+      if target.name == "RNScreens"
+          append_header_search_path(target, "${PODS_ROOT}/../../node_modules/react-native/ReactCommon")
+      end
+    end
+
+    # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
+    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false
+    )
+  end
+end
+
+def append_header_search_path(target, path)
+  target.build_configurations.each do |config|
+      # Note that there's a space character after `$(inherited)`.
+      config.build_settings["HEADER_SEARCH_PATHS"] ||= "$(inherited) "
+      config.build_settings["HEADER_SEARCH_PATHS"] << path
+  end
+end
